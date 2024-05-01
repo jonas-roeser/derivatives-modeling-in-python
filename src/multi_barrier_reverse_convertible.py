@@ -9,7 +9,6 @@ Dr. Mathis Moerke
 '''
 
 # IV
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -51,7 +50,6 @@ def implied_volatility(option_price, S, K, T, r, option_type):
     except ValueError:
         return np.nan  # Handle cases where brentq does not converge
 
-
 # Load data
 stocks = pd.read_csv('data/stock_prices.csv')
 options = pd.read_csv('data/option_prices.csv')
@@ -76,8 +74,8 @@ options = options.merge(stocks_long, left_on=['underlying', 'date'], right_on=['
 options['moneyness'] = (options['strike'] / options['price']).round(2)
 options['time_to_maturity'] = (options['exdate'] - options['date']).dt.days / 365.25
 
-# Define the risk free rate (Year Horizon as of 26.06.2018 see file "interest_rates.csv")
-r = -0.005 
+# Define the risk free rate (1 Year US Forward Rate as of 26.06.2018 see file "interest_rates.csv")
+r = 0.0277094
 
 # Rename Columns for IV Calculation
 options = options.rename(columns={'Date': 'date', 'strike': 'K', 'price': 'S', 'time_to_maturity': "T"})
@@ -115,8 +113,49 @@ apple_iv = get_atm_iv(atm_options, 'Apple')
 microsoft_iv = get_atm_iv(atm_options, 'Microsoft')
 
 
+#import stock data
+stocks_correl = pd.read_csv('data/stock_prices.csv', index_col='Date', parse_dates=True)
+
+# Remove entities to obtain 4yr daily data (26.06.2014 - 26.06.2018)
+stocks_correl = stocks_correl.iloc[47:-216]
+
+# Calculate the logarithmic returns
+log_returns = np.log(stocks_correl / stocks_correl.shift(1))
+
+# Compute the correlation matrix
+correlation_matrix = log_returns.corr()
+
+print(correlation_matrix)
 
 
+# Calc Bond Price
+def price_bond(nominal, coupon_rate, years_to_maturity, r, credit_spread, frequency=2):
+
+    total_yield = r + credit_spread
+    coupon_payment = nominal * coupon_rate / frequency
+    num_payments = years_to_maturity * frequency
+    discount_factors = [(1 + total_yield / frequency) ** -n for n in range(1, num_payments + 1)]
+    
+    # Calculate present value of future coupon payments
+    present_value_coupons = sum(coupon_payment * df for df in discount_factors)
+    
+    # Calculate present value of the nominal value (paid at maturity)
+    present_value_nominal = nominal / (1 + total_yield / frequency) ** num_payments
+    
+    # Total bond price is the sum of the present value of coupons and nominal
+    bond_price = present_value_coupons + present_value_nominal
+    return bond_price
+
+nominal_value = 1000
+annual_coupon_rate = 0.085
+maturity_in_years = 1
+r = 0.0277094 # 1 Year US Forward Rate as of 26.06.2018
+credit_risk_spread = 0.00172599899999999 # 1 year Unsubordinated UBS cds as of 26.06.2018
+
+# Calculate bond price
+bond_price = price_bond(nominal_value, annual_coupon_rate, maturity_in_years, r, credit_risk_spread)
+
+# stopppppp
 
 def sim_correlated_path():
     '''
