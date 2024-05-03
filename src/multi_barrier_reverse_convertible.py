@@ -217,23 +217,110 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
     
     return correlated_paths
 
-def worst_of_down_and_in_put():
+def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *args, pricing_date=None, expiration_date=None, i_rate=0.01, sim_function=sim_correlated_paths, sim_runs=100, **kwargs):
     '''
     Calcualte worst-of down-and-in put option price.
     
     Parameters
     ---
-    ...
+    barrier_levels : pd.DataFrame
+        Underlying barrier levels.
+    strike_prices : pd.DataFrame
+        Underlying strike prices.
+    conversion_ratios : pd.DataFrame
+        Underlying conversion ratios.
+    pricing_date : datetime, default None
+        Pricing date.
+    expiration_date : datetime, default None
+        Expiration date.
+    i_rate : float, default 0.01
+        Interest rate.
+    sim_function : callable, deault sim_correlated_paths
+        Function for computing correlated price paths.
+    sim_runs : int, default 100
+        Number of simulation runs.
 
     Returns
     ---
-    ...
+    option_price : float
+        Price of the option.
     '''
-    # Insert code
-    pass
+    # Vector containing the payoff for each simulated price path
+    payoffs = np.zeros(sim_runs)
+
+    # Run monte carlo simulation
+    for i in range(sim_runs):
+
+        # Simulate price paths
+        prices = sim_function(*args, pricing_date, expiration_date, i_rate, **kwargs)
+        
+        # Determine if the option knocks in for any stock
+        knocks_in = (prices <= barrier_levels.iloc[0]).any().any()
+
+        # If the option knocks in:
+        if knocks_in:
+
+            # Get expiration prices:
+            expiration_prices = prices.loc[expiration_date]
+
+            # Check if option is in the money:
+            in_the_money = (expiration_prices < strike_prices).any().any()
+
+            # If the option is in the money:
+            if in_the_money:
+
+                # Calculate rerlative performance
+                performance = (expiration_prices - strike_prices) / strike_prices
+                
+                # Find worst performing stock
+                worst_performing_stock = performance.idxmin()
+
+                # Compute payoff
+                payoffs[i] = (strike_prices[worst_performing_stock] - expiration_prices[worst_performing_stock]) * conversion_ratios[worst_performing_stock]
+    
+    # Compute number of days from pricing to expiration date
+    n_days = (expiration_date - pricing_date).days + 1
+
+    # Compute time delta in terms of years
+    delta_years = n_days / 365.25
+
+    # Compute option price from average payoffs
+    option_price = np.exp(- i_rate * delta_years) * sum(payoffs) / sim_runs
+
+    return option_price
 
 if __name__ == '__main__':
 
+    # Load stock prices
+    stock_prices = pd.read_csv('../data/stock_prices.csv', parse_dates=['Date'], index_col='Date').convert_dtypes().rename(columns=str.lower)
+
+    # Load option prices
+    # option_prices = pd.read_csv('../data/option_prices.csv', parse_dates=['exdate']).convert_dtypes()
+    # option_prices = option_prices[~((option_prices['date'] == 'Currency') & (option_prices['option_price']=='USD'))]
+    # option_prices['date'] = pd.to_datetime(option_prices['date'])
+    # option_prices.set_index('date', inplace=True)
+
+    # Load interest rates
+    # interest_rates = pd.read_csv('../data/interest_rates.csv', parse_dates=['date'], index_col='date').convert_dtypes()
+
+    # Load CDS spreads
+    # cds_spreads = pd.read_csv('../data/cds_spreads.csv', parse_dates=['date'], index_col='date').convert_dtypes()
+
+    # Set random seed to ensure replicability
+    np.random.seed(42)
+
+    # Set product parameters
+    NOMINAL_VALUE = 1000
+    pricing_date = pd.to_datetime('2018-06-27')
+    expiration_date = pd.to_datetime('2019-06-20')
+    strike_prices = stock_prices.loc[pricing_date]
+    KICK_IN_LEVEL = 0.65
+    barrier_levels = strike_prices * KICK_IN_LEVEL
+    conversion_ratios = round(NOMINAL_VALUE / strike_prices, 4)
+
+    # These should be computed in code
+    I_RATE = 0.01
+    volatilities = pd.DataFrame([[0.2, 0.25, 0.15]], columns=stock_prices.columns)
 
     # nominal_value = 1000
     # annual_coupon_rate = 0.085
@@ -245,4 +332,9 @@ if __name__ == '__main__':
     # bond_price = price_bond(nominal_value, annual_coupon_rate, maturity_in_years, r, credit_risk_spread)
 
     # Calcualte worst-of down-and-in put option price
-    worst_of_down_and_in_put()
+    option_price = worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios,
+                             stock_prices, volatilities, # *args (only inner)
+                             pricing_date=pricing_date, expiration_date=expiration_date, i_rate=I_RATE,
+                             exchange='SIX' # **kwargs (only inner)
+                             )
+    
