@@ -8,8 +8,10 @@ University of St.Gallen
 Dr. Mathis Moerke
 '''
 
-# IV
+# Load packages
+import numpy as np
 import pandas as pd
+import pandas_market_calendars as mcal
 
 # Packages for IV calculation
 # import matplotlib.pyplot as plt
@@ -131,27 +133,89 @@ import pandas as pd
 #     # Total bond price is the sum of the present value of coupons and nominal
 #     bond_price = present_value_coupons + present_value_nominal
 #     return bond_price
+
+def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, expiration_date=None, i_rate=0.01, exchange='SIX'):
     '''
     Simulate correlated stock price paths.
 
     Parameters
     ---
-    price : str, default None
-        File name.
-    vola : 
-        Vola of underlying.
-    rate : 
+    underlying_prices : pd.DataFrame
+        Data frame with underplying prices.
+    volatilities : pd.DataFrame
+        Option implied volatilities.
+    pricing_date : datetime, default None
+        Pricing date.
+    expiration_date : datetime, default None
+        Expiration date.
+    i_rate : float, default 0.01
         Interest rate (cont. comp., annualized).
-    t :
-        Entire time.
+    exchange : str, default 'SIX'
+        Exchange the product is traded on.
     
     Returns
     ---
-    price : Series
-        Series of prices.
+    correlated_paths : data frame
+        Data frame of correlated paths.
     '''
-    # Insert code
-    pass
+    # Compute number of days from pricing to expiration date
+    n_days = (expiration_date - pricing_date).days + 1
+
+    # Compute time delta in terms of years
+    delta_years = n_days / 365.25
+
+    # Create a calendar
+    exchange = mcal.get_calendar(exchange)
+
+    # Generate data range
+    date_range = exchange.valid_days(start_date=pricing_date, end_date=expiration_date).tz_convert(None)
+    
+    # Compute time step per trading day
+    time_step = delta_years / len(date_range)
+
+    # Copute log returns
+    log_returns = np.log(underlying_prices / underlying_prices.shift())
+
+    # Compute correlations
+    corr_matrix = log_returns.corr()
+    corr_12 = corr_matrix.iloc[0,1]
+    corr_13 = corr_matrix.iloc[0,2]
+    corr_23 = corr_matrix.iloc[1,2]
+
+    # Compute additional coefficients for correlated paths computation
+    corr_23_star = (corr_23 - corr_12 * corr_13) / np.sqrt(1 - corr_12**2)
+    corr_33_star = np.sqrt((1 - corr_12**2 - corr_23**2 - corr_13**2 + 2 * corr_12 * corr_13 * corr_23) / (1 - corr_12**2))
+
+    # Create empty dataframe
+    correlated_paths = pd.DataFrame(index=date_range, columns=underlying_prices.columns)
+
+    # Generate correlated stock paths
+    for i, date in enumerate(date_range):
+
+        # For first date
+        if (i == 0) & (date == pricing_date):
+
+            # Set first price equal to underlying
+            correlated_paths.loc[date] = underlying_prices.loc[pricing_date]
+
+        # For all other dates
+        else:
+
+            # Set random errors
+            e_1 = np.random.normal()
+            e_2 = np.random.normal()
+            e_3 = np.random.normal()
+
+            # First underlying
+            correlated_paths.loc[date, correlated_paths.columns[0]] = correlated_paths.iloc[i - 1, 0] * np.exp((i_rate - 0.5 * volatilities.iloc[0,0]**2) * time_step + volatilities.iloc[0,0] * np.sqrt(time_step) * e_1)
+
+            # Second underlying
+            correlated_paths.loc[date, correlated_paths.columns[1]] = correlated_paths.iloc[i - 1, 1] * np.exp((i_rate - 0.5 * volatilities.iloc[0,1]**2) * time_step + volatilities.iloc[0,1] * np.sqrt(time_step) * (corr_12 * e_1 + np.sqrt(1 - corr_12**2) * e_2))
+
+            # Third underlying
+            correlated_paths.loc[date, correlated_paths.columns[2]] = correlated_paths.iloc[i - 1, 2] * np.exp((i_rate - 0.5 * volatilities.iloc[0,2]**2) * time_step + volatilities.iloc[0,2] * np.sqrt(time_step) * (corr_13 * e_1 + corr_23_star * e_2 + corr_33_star * e_3))
+    
+    return correlated_paths
 
 def worst_of_down_and_in_put():
     '''
