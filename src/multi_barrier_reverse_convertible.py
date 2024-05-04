@@ -385,19 +385,21 @@ def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *
 if __name__ == '__main__':
 
     # Load stock prices
-    stock_prices = pd.read_csv('../data/stock_prices.csv', parse_dates=['Date'], index_col='Date').convert_dtypes().rename(columns=str.lower)
+    stock_prices = pd.read_csv('../data/stock_prices.csv', parse_dates=['Date'], index_col='Date').convert_dtypes()
+    stock_prices.index.name = stock_prices.index.name.lower()
 
     # Load option prices
-    # option_prices = pd.read_csv('../data/option_prices.csv', parse_dates=['exdate']).convert_dtypes()
-    # option_prices = option_prices[~((option_prices['date'] == 'Currency') & (option_prices['option_price']=='USD'))]
-    # option_prices['date'] = pd.to_datetime(option_prices['date'])
-    # option_prices.set_index('date', inplace=True)
+    option_prices = pd.read_csv('../data/option_prices.csv', parse_dates=['exdate'])
+    option_prices = option_prices[~((option_prices['date'] == 'Currency') & (option_prices['option_price']=='USD'))].convert_dtypes()
+    option_prices['option_price'] = option_prices['option_price'].astype(float)
+    option_prices['date'] = pd.to_datetime(option_prices['date'])
+    option_prices.set_index('date', inplace=True)
 
     # Load interest rates
-    # interest_rates = pd.read_csv('../data/interest_rates.csv', parse_dates=['date'], index_col='date').convert_dtypes()
+    interest_rates = pd.read_csv('../data/interest_rates.csv', parse_dates=['date'], index_col='date').convert_dtypes()
 
     # Load CDS spreads
-    # cds_spreads = pd.read_csv('../data/cds_spreads.csv', parse_dates=['date'], index_col='date').convert_dtypes()
+    cds_spreads = pd.read_csv('../data/cds_spreads.csv', parse_dates=['date'], index_col='date').convert_dtypes()
 
     # Set random seed to ensure replicability
     np.random.seed(42)
@@ -412,12 +414,17 @@ if __name__ == '__main__':
     pricing_date = pd.to_datetime('2018-06-27')
     expiration_date = pd.to_datetime('2019-06-20')
     strike_prices = stock_prices.loc[pricing_date]
-    KICK_IN_LEVEL = 0.65
     barrier_levels = strike_prices * KICK_IN_LEVEL
     conversion_ratios = round(NOMINAL_VALUE / strike_prices, 4)
+    EXCHANGE = 'SIX'
+
+    # Define risk free rate as 1 Year US Forward Rate at pricing date (??matching the time-to-maturity of the option)
+    i_rate = interest_rates[(interest_rates['country'] == 'USA') & (interest_rates['currency']=='USD') & (interest_rates['horizon'] == '1 year')].loc[pricing_date,'rate']
+
+    # Define credit spread as 1 Year Unsubordinated UBS CDS at pricing date
+    credit_spread = cds_spreads[(cds_spreads['name'] == 'UBS') & (cds_spreads['seniority']=='Unsubordinated') & (cds_spreads['horizon'] == '1 year')].loc[pricing_date,'spread']
 
     # These should be computed in code
-    I_RATE = 0.01
     volatilities = pd.DataFrame([[0.2, 0.25, 0.15]], columns=stock_prices.columns)
 
     # Add stock price to option data
@@ -460,8 +467,8 @@ if __name__ == '__main__':
     # Calcualte worst-of down-and-in put option price
     option_price = worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios,
                              stock_prices, volatilities, # *args (only inner)
-                             pricing_date=pricing_date, expiration_date=expiration_date, i_rate=I_RATE,
-                             exchange='SIX' # **kwargs (only inner)
+                             pricing_date=pricing_date, expiration_date=expiration_date, i_rate=i_rate,
+                             exchange=EXCHANGE # **kwargs (only inner)
                              )
     
     # Calcualte structure product price (short the option)
