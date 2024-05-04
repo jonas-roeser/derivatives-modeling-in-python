@@ -361,6 +361,9 @@ def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *
 
                 # Calculate rerlative performance
                 performance = (expiration_prices - strike_prices) / strike_prices
+
+                # Fix for Leo's PC
+                performance = pd.to_numeric(performance)
                 
                 # Find worst performing stock
                 worst_performing_stock = performance.idxmin()
