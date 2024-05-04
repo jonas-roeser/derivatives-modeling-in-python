@@ -461,3 +461,13 @@ if __name__ == '__main__':
                              exchange='SIX' # **kwargs (only inner)
                              )
     
+    # Calcualte structure product price (short the option)
+    product_value = bond_price - option_price
+
+    # Calculate the issue premium
+    issue_premium = (NOMINAL_VALUE - product_value) / product_value
+
+    # Sensitivity analysis
+    # discount rate : risk free rate
+    # correlations : 
+    # and volatility :
