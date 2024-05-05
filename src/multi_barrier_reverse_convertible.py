@@ -97,14 +97,14 @@ def black_scholes(S, K, t, T, v, r, dividend_yield, option_type):
     parameters = {key: value if isinstance(value, pd.core.series.Series) else pd.Series(value) for key, value in parameters.items()}
 
     # Check if all parameters except volatility and expiration date have the same length
-    if any(len(value) != len(parameters['S']) for key, value in parameters.items() if key not in {'T', 'v'}):
+    if any(len(value) != len(parameters['S']) for key, value in parameters.items() if key not in {'v'}):
         raise ValueError('Option parameters are of different length')
     
     # Initialise list of option prices
     option_prices = []
 
     # Iteratre through all options
-    for i in range(len(S)):
+    for i in range(len(parameters['S'])):
 
         # Set parameters for each option
         S = parameters['S'].iloc[i]
@@ -177,6 +177,9 @@ def rmse(actuals, error_type='absolute', **kwargs):
 
     # Compute Black-Scholes option prices
     predictions = black_scholes(**kwargs)
+
+    # Ensure actuals is a list
+    actuals = actuals if isinstance(actuals, list) else [actuals]
 
     # Compute error for each option
     for actual, prediction in zip(actuals, predictions):
@@ -418,7 +421,7 @@ if __name__ == '__main__':
     conversion_ratios = round(NOMINAL_VALUE / strike_prices, 4)
     EXCHANGE = 'SIX'
 
-    # Define risk free rate as 1 Year US Forward Rate at pricing date (??matching the time-to-maturity of the option)
+    # Define risk free rate as 1 Year US Forward Rate at pricing date
     i_rate = interest_rates[(interest_rates['country'] == 'USA') & (interest_rates['currency']=='USD') & (interest_rates['horizon'] == '1 year')].loc[pricing_date,'rate']
 
     # Define credit spread as 1 Year Unsubordinated UBS CDS at pricing date
@@ -427,39 +430,41 @@ if __name__ == '__main__':
     # These should be computed in code
     volatilities = pd.DataFrame([[0.2, 0.25, 0.15]], columns=stock_prices.columns)
 
+    # Select option prices on pricing date
+    option_prices = option_prices.loc[pricing_date]
+
+    # Select option prices with 1 year to maturity
+    option_prices['years_to_maturity'] = (option_prices['exdate'] - option_prices.index).dt.days / 365.25
+    option_prices = option_prices[option_prices['years_to_maturity'].between(0.9, 1.1)]
+
     # Add stock price to option data
     stock_prices_long = stock_prices.melt(var_name='underlying', value_name='underlying_price', ignore_index=False)
     option_prices = pd.merge(option_prices, stock_prices_long, on=['date','underlying'])
 
+    # Select option prices at the money
+    option_prices['moneyness'] = (option_prices['strike'] / option_prices['underlying_price'])
+    option_prices = option_prices[option_prices['moneyness'].between(0.9, 1.1)]
+
     # Add risk free rate to option data
-    option_prices['rate'] = 0.1
+    option_prices['rate'] = i_rate
 
     # Add dividend yield to option data
-    option_prices['dividend_yield'] = 0
+    last_dividend = {
+        'Adobe': 0, 
+        'Apple': 0.73,
+        'Microsoft': 0.42
+    }
+    option_prices['last_dividend'] = option_prices['underlying'].apply(lambda x: last_dividend['Adobe'] if x == 'Adobe' else last_dividend['Apple'] if x == 'Apple' else last_dividend['Microsoft'])
+    option_prices['dividend_yield'] = 4 * option_prices.last_dividend / option_prices.underlying_price
 
-    option_prices['volatility'] = option_prices.groupby('exdate').apply(lambda option: implied_volatility(
-        error_function=rmse, starting_value=0.2, method='Nelder-Mead', bounds=(0, None), # kwargs for implied_volatility()
-        actuals=option.option_price, error_type='absolute', # kwargs for rmse()
-        S=option.underlying_price, K=option.strike, t=option.index, T=option.name, r=option.rate, dividend_yield=option.dividend_yield, option_type=option.option_type)) # kwargs for black_scholes()
+    # Compute implied volatilities
+    option_prices['implied_volatility'] = option_prices.apply(lambda x: implied_volatility(
+        error_function=rmse, starting_value=0.1, method='Nelder-Mead', bounds=(0, None), # kwargs for implied_volatility()
+        actuals=x.option_price, error_type='absolute', # kwargs for rmse()
+        S=x.underlying_price, K=x.strike, t=x.name, T=x.exdate, r=x.rate, dividend_yield=x.dividend_yield, option_type=x.option_type), axis=1)
 
-    # # Calculate implied volatility for each option and add it as a new column
-    # options['implied_volatility'] = options.apply(
-    #     lambda row: implied_volatility(
-    #         row['option_price'], row['S'], row['K'], row['T'], r, row['option_type']
-    #     ), axis=1
-    # )
-
-    # # Filter data for options as of June 26, 2018
-    # specific_date = pd.Timestamp('2018-06-26')
-    # one_year_options = options[
-    #     (options['date'] == specific_date) &
-    #     (options['T'].between(0.9, 1.1))
-    # ]
-
-    # # Get ATM implied volatility for each stock
-    # adobe_iv = get_atm_iv(atm_options, 'Adobe')
-    # apple_iv = get_atm_iv(atm_options, 'Apple')
-    # microsoft_iv = get_atm_iv(atm_options, 'Microsoft')
+    # Average implied volatilities for each underlying
+    volatilities = pd.DataFrame(option_prices.groupby('underlying')['implied_volatility'].mean()).T
 
     # Calculate bond price
     bond_price = bond(NOMINAL_VALUE, COUPON_RATE, COUPON_FREQUENCY, MATURITY_IN_YEARS, i_rate, credit_spread)
