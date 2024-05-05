@@ -427,9 +427,6 @@ if __name__ == '__main__':
     # Define credit spread as 1 Year Unsubordinated UBS CDS at pricing date
     credit_spread = cds_spreads[(cds_spreads['name'] == 'UBS') & (cds_spreads['seniority']=='Unsubordinated') & (cds_spreads['horizon'] == '1 year')].loc[pricing_date,'spread']
 
-    # These should be computed in code
-    volatilities = pd.DataFrame([[0.2, 0.25, 0.15]], columns=stock_prices.columns)
-
     # Select option prices on pricing date
     option_prices = option_prices.loc[pricing_date]
 
@@ -450,7 +447,7 @@ if __name__ == '__main__':
 
     # Add dividend yield to option data
     last_dividend = {
-        'Adobe': 0, 
+        'Adobe': 0,
         'Apple': 0.73,
         'Microsoft': 0.42
     }
