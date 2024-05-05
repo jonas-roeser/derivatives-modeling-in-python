@@ -310,7 +310,7 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
     
     return correlated_paths
 
-def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *args, pricing_date=None, expiration_date=None, i_rate=0.01, sim_function=sim_correlated_paths, sim_runs=100, **kwargs):
+def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *args, pricing_date=None, expiration_date=None, i_rate=0.01, sim_function=sim_correlated_paths, sim_runs=1000, **kwargs):
     '''
     Calcualte worst-of down-and-in put option price.
     
@@ -459,12 +459,18 @@ if __name__ == '__main__':
 
     # Compute implied volatilities
     option_prices['implied_volatility'] = option_prices.apply(lambda x: implied_volatility(
-        error_function=rmse, starting_value=0.1, method='Nelder-Mead', bounds=(0, None), # kwargs for implied_volatility()
+        error_function=rmse, starting_value=0.2, method='Nelder-Mead', bounds=(0, None), # kwargs for implied_volatility()
         actuals=x.option_price, error_type='absolute', # kwargs for rmse()
         S=x.underlying_price, K=x.strike, t=x.name, T=x.exdate, r=x.rate, dividend_yield=x.dividend_yield, option_type=x.option_type), axis=1)
 
     # Average implied volatilities for each underlying
     volatilities = pd.DataFrame(option_prices.groupby('underlying')['implied_volatility'].mean()).T
+
+    # Sensitivity analysis
+    # i_rate = i_rate * 1.1
+    # i_rate = i_rate * 0.9
+    # volatilities = volatilities * 1.1
+    # volatilities = volatilities * 0.9
 
     # Calculate bond price
     bond_price = bond(NOMINAL_VALUE, COUPON_RATE, COUPON_FREQUENCY, MATURITY_IN_YEARS, i_rate, credit_spread)
@@ -476,13 +482,8 @@ if __name__ == '__main__':
                              exchange=EXCHANGE # **kwargs (only inner)
                              )
     
-    # Calcualte structure product price (short the option)
+    # Calcualte structured product price (short the option)
     product_value = bond_price - option_price
 
     # Calculate the issue premium
     issue_premium = (NOMINAL_VALUE - product_value) / product_value
-
-    # Sensitivity analysis
-    # discount rate : risk free rate
-    # correlations : 
-    # and volatility :
