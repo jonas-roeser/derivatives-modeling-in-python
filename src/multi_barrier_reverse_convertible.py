@@ -271,6 +271,12 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
 
     # Compute correlations
     corr_matrix = log_returns.corr()
+
+    # Sensititvity analysis
+    # corr_matrix = corr_matrix * 1.1
+    # corr_matrix = corr_matrix * 0.9
+
+    # Assign correlations
     corr_12 = corr_matrix.iloc[0,1]
     corr_13 = corr_matrix.iloc[0,2]
     corr_23 = corr_matrix.iloc[1,2]
