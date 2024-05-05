@@ -21,7 +21,7 @@ def bond(nominal_value, coupon_rate, coupon_frequency, years_to_maturity, i_rate
 
     Parameters
     ---
-    nominal_value : float
+    nominal_value : int or float
         Nominal value.
     coupon_rate : float
         Rate of coupon payments.
@@ -87,7 +87,7 @@ def black_scholes(S, K, t, T, v, r, dividend_yield, option_type):
 
     Returns
     ---
-    option_price :
+    option_price : float
         Price of the option.
     '''
     # Create parameter dictionary
@@ -162,10 +162,10 @@ def rmse(actuals, error_type='absolute', **kwargs):
     ---
     actuals : int or float
         Actual value.
-    predicted : int or float
-        Predicted value.
     error_type : str, default 'absolute'
         Type of error, one of 'absolute' or 'relative'
+    **kwargs
+        arguments passed to black_scholes()
 
     Returns
     ---
@@ -210,8 +210,14 @@ def implied_volatility(error_function=rmse, starting_value=0.2, method='Nelder-M
     ---
     error_function : callable, default rmse
         Function for computing the error that is to be minimised.
-    starting_value : int or float, default 0
+    starting_value : int or float, default 0.2
         Starting value of the estimator.
+    method : str, default 'Nelder-Mead'
+        Name of the optimisation algorithm, default 'Nelder-Mead'.
+    bounds : tuple, default (0, None)
+        Bounds of the estimator, default (0, None).
+    **kwargs
+        arguments passed to error_function()
     
     Returns
     ---
@@ -236,10 +242,10 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
     underlying_prices : pd.DataFrame
         Data frame with underplying prices.
     volatilities : pd.DataFrame
-        Option implied volatilities.
-    pricing_date : datetime, default None
+        Data frame with option implied volatilities.
+    pricing_date : pd.datetime, default None
         Pricing date.
-    expiration_date : datetime, default None
+    expiration_date : pd.datetime, default None
         Expiration date.
     i_rate : float, default 0.01
         Interest rate (cont. comp., annualized).
@@ -248,7 +254,7 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
     
     Returns
     ---
-    correlated_paths : data frame
+    correlated_paths : pd.DataFrame
         Data frame of correlated paths.
     '''
     # Compute number of days from pricing to expiration date
@@ -266,7 +272,7 @@ def sim_correlated_paths(underlying_prices, volatilities, pricing_date=None, exp
     # Compute time step per trading day
     time_step = delta_years / len(date_range)
 
-    # Copute log returns
+    # Copute historical log returns
     log_returns = np.log(underlying_prices / underlying_prices.shift())
 
     # Compute correlations
@@ -328,16 +334,20 @@ def worst_of_down_and_in_put(barrier_levels, strike_prices, conversion_ratios, *
         Underlying strike prices.
     conversion_ratios : pd.DataFrame
         Underlying conversion ratios.
+    *args
+        Arguments passed to sim_function()
     pricing_date : datetime, default None
         Pricing date.
     expiration_date : datetime, default None
         Expiration date.
     i_rate : float, default 0.01
-        Interest rate.
+        Interest rate (continuous & annualised).
     sim_function : callable, deault sim_correlated_paths
         Function for computing correlated price paths.
     sim_runs : int, default 100
         Number of simulation runs.
+    **kwargs
+        Keyword arguments passed to sim_function().
 
     Returns
     ---
